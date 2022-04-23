@@ -6,7 +6,7 @@
 #include <WireGuard-ESP32.h>
 
 #define WM_DEBUG_LEVEL 4
-#define UPDATE_INTERVAL_MS 60000
+#define SEND_INTERVAL_MS 5000
 
 class IPAddressParameter : public WiFiManagerParameter {
 public:
@@ -202,31 +202,28 @@ void setup()
 void loop()
 {
   WiFiClient client;
+  unsigned long seconds = (millis() / 1000) % 60;
+  uint8_t buffer[256] = {0};
+  size_t bytesToRead = 0;
 
-  if( !client.connect("metadata.soracom.io", 80) ) {
-    Serial.println("Failed to connect...");
-    delay(5000);
-    return;
-  }
-  
-  client.write("GET /v1/subscriber.imsi HTTP/1.1\r\n");
-  client.write("Host: metadata.soracom.io\r\n");
-  client.write("\r\n\r\n");
-
-  while(client.connected()) {
-    auto line = client.readStringUntil('\n');
-    Serial.write(line.c_str());
-    Serial.write("\n");
-    if( line == "\r" ) break;
-  }
-  if(client.connected()) {
-    uint8_t buffer[256] = {0};
-    size_t bytesToRead = 0;
-    while((bytesToRead = client.available()) > 0) {
-      bytesToRead = bytesToRead > sizeof(buffer) ? sizeof(buffer) : bytesToRead;
-      auto bytesRead = client.readBytes(buffer, bytesToRead); 
-      Serial.write(buffer, bytesRead);
+  if(!client.connected()) {
+    Serial.println("Connecting...");
+    if(!client.connect("harvest.soracom.io", 8514)) {
+      Serial.println("Failed to connect...");
+      delay(SEND_INTERVAL_MS);
+      return;
     }
   }
-  delay(UPDATE_INTERVAL_MS);
+
+  Serial.println("Sending...");
+  client.write((char*)&seconds, sizeof(seconds));
+  Serial.println("Sended.");
+
+  while((bytesToRead = client.available()) > 0) {
+    bytesToRead = bytesToRead > sizeof(buffer) ? sizeof(buffer) : bytesToRead;
+    auto bytesRead = client.readBytes(buffer, bytesToRead); 
+    Serial.write(buffer, bytesRead);
+  }
+
+  delay(SEND_INTERVAL_MS);
 }
